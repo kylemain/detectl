@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+
+# Local credentials -- never commit a real config file
+config.yml
+*.local.yml
+.env

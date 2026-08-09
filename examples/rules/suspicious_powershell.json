@@ -1,0 +1,8 @@
+{
+  "name": "Suspicious PowerShell Encoded Command",
+  "description": "Flags PowerShell invoked with an encoded/obfuscated command argument, a common technique for evading naive keyword-based detections.",
+  "query": "process.name:(\"powershell.exe\" OR \"pwsh.exe\") AND process.args:(\"-enc\" OR \"-EncodedCommand\")",
+  "severity": "high",
+  "enabled": true,
+  "tags": ["execution", "powershell", "obfuscation"]
+}

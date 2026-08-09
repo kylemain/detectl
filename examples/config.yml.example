@@ -1,0 +1,35 @@
+# Copy this to ~/.detectl/config.yml (or pass --config /path/to/this/file)
+# and fill in the platform(s) you actually use. Nothing here needs to be a
+# literal secret -- ${VAR_NAME} is substituted from your environment at load
+# time, so tokens/secrets can stay out of the file entirely.
+#
+# Any field you omit here falls back to a platform-prefixed environment
+# variable instead, e.g. SPLUNK_BASE_URL / SPLUNK_TOKEN, so you can skip this
+# file completely and configure purely via environment if you prefer.
+
+splunk:
+  base_url: https://splunk.example.com:8089
+  token: ${SPLUNK_TOKEN}
+  owner: nobody           # optional, defaults to "nobody"
+  app: search              # optional, defaults to "search"
+  verify_ssl: true         # optional, defaults to true
+
+elastic:
+  kibana_base_url: https://kibana.example.com:5601
+  es_base_url: https://elasticsearch.example.com:9200   # optional; required only for `detectl query`
+  api_key: ${ELASTIC_API_KEY}
+  verify_ssl: true
+
+sentinel:
+  tenant_id: ${SENTINEL_TENANT_ID}
+  client_id: ${SENTINEL_CLIENT_ID}
+  client_secret: ${SENTINEL_CLIENT_SECRET}
+  subscription_id: ${SENTINEL_SUBSCRIPTION_ID}
+  resource_group: my-sentinel-rg
+  workspace_name: my-sentinel-workspace
+  workspace_id: ${SENTINEL_WORKSPACE_ID}   # the Log Analytics workspace GUID, used for KQL queries
+
+crowdstrike:
+  client_id: ${CROWDSTRIKE_CLIENT_ID}
+  client_secret: ${CROWDSTRIKE_CLIENT_SECRET}
+  base_url: https://api.crowdstrike.com   # change for EU/Gov clouds, e.g. api.eu-1.crowdstrike.com

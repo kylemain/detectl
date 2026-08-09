@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "detectl"
+version = "0.1.0"
+description = "A CLI for managing detection rules, tuning lists, alerts, and ad-hoc queries across multiple SIEM/EDR platforms through one consistent interface."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Kyle Main" }]
+dependencies = [
+    "click>=8.0",
+    "PyYAML>=6.0",
+    "requests>=2.28",
+]
+
+[project.scripts]
+detectl = "detectl.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/kylemain/detectl"
+
+[tool.setuptools.packages.find]
+include = ["detectl*"]

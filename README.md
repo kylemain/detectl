@@ -31,8 +31,7 @@ lists, alerts, queries) work the same way no matter which SIEM you're
 pointed at.
 
 This is a from-scratch, clean-room implementation against each platform's
-real public REST API -- not a wrapper around any vendor SDK, and not tied to
-any employer's internal tooling.
+real public REST API -- not a wrapper around any vendor SDK.
 
 ## Supported platforms
 

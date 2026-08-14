@@ -1,0 +1,8 @@
+{
+  "name": "Web Shell Creation via IIS Worker Process",
+  "description": "Detects w3wp.exe writing a script file (.aspx/.asp/.php) to a web-accessible directory, a common indicator of web shell deployment.",
+  "query": "process.name:\"w3wp.exe\" AND file.name:(\"*.aspx\" OR \"*.asp\" OR \"*.php\") AND NOT file.path:\"*\\\\App_Data\\\\*\"",
+  "severity": "high",
+  "enabled": true,
+  "tags": ["persistence", "web-shell", "attack.t1505.003"]
+}

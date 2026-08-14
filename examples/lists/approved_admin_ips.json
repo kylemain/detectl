@@ -1,0 +1,6 @@
+{
+  "name": "approved-admin-ips",
+  "kind": "allowlist",
+  "description": "Jump-box and bastion-host source IPs that are expected to perform privileged/administrative actions; suppresses noisy admin-activity alerts from these sources only.",
+  "items": ["10.10.1.5", "10.10.1.6", "192.168.100.1"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Svchost Beaconing to Known C2 Listener Ports",
+  "description": "Detects svchost.exe (a common LOLBin for hiding C2 traffic) making an outbound connection to a port frequently used by off-the-shelf C2 frameworks.",
+  "query": "process.name:\"svchost.exe\" AND destination.port:(4444 OR 8443 OR 8080)",
+  "severity": "medium",
+  "enabled": true,
+  "tags": ["command-and-control", "beaconing", "attack.t1071.001"]
+}

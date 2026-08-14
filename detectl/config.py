@@ -46,6 +46,9 @@ REQUIRED_FIELDS: Dict[str, List[str]] = {
         "workspace_id",
     ],
     "crowdstrike": ["client_id", "client_secret"],
+    "qradar": ["base_url", "token"],
+    "sumologic": ["access_id", "access_key"],
+    "chronicle": ["project", "location", "instance", "access_token"],
 }
 
 OPTIONAL_FIELDS: Dict[str, List[str]] = {
@@ -53,6 +56,8 @@ OPTIONAL_FIELDS: Dict[str, List[str]] = {
     "elastic": ["es_base_url", "verify_ssl"],
     "sentinel": ["base_url"],
     "crowdstrike": ["base_url", "logscale_url", "logscale_token", "logscale_repository"],
+    "qradar": ["version", "verify_ssl"],
+    "sumologic": ["base_url"],
 }
 
 

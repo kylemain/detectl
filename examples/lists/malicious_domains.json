@@ -1,0 +1,6 @@
+{
+  "name": "malicious-domains",
+  "kind": "blocklist",
+  "description": "C2 and phishing domains confirmed malicious from recent incident response and threat intel feeds.",
+  "items": ["evil-c2.example.net", "phish-portal.example.com", "malware-drop.example.org"]
+}

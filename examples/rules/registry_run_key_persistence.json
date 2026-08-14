@@ -1,0 +1,8 @@
+{
+  "name": "Registry Run Key Persistence via Suspicious Directory",
+  "description": "Detects a new value added to a Run/RunOnce registry key pointing to an executable staged in a world-writable or unusual directory.",
+  "query": "registry.key:(\"*\\\\CurrentVersion\\\\Run\" OR \"*\\\\CurrentVersion\\\\RunOnce\") AND registry.value:(\"C:\\\\Users\\\\Public\\\\*\" OR \"C:\\\\ProgramData\\\\*\" OR \"C:\\\\Windows\\\\Temp\\\\*\")",
+  "severity": "high",
+  "enabled": true,
+  "tags": ["persistence", "registry", "attack.t1547.001"]
+}

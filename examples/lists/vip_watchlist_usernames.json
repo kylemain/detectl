@@ -1,0 +1,6 @@
+{
+  "name": "vip-watchlist-usernames",
+  "kind": "watchlist",
+  "description": "Executive and privileged-access accounts that get elevated scrutiny (lower alert thresholds, mandatory triage) regardless of individual rule severity.",
+  "items": ["ceo.jsmith", "cfo.mchen", "svc-domain-admin", "svc-backup-admin"]
+}

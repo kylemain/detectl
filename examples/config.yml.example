@@ -41,3 +41,22 @@ crowdstrike:
   logscale_url: https://cloud.crowdstrike.com       # optional; region/self-hosted URL varies
   logscale_token: ${CROWDSTRIKE_LOGSCALE_TOKEN}     # optional; a LogScale Personal API token, not the Falcon client_id/secret
   logscale_repository: search-all                    # optional, defaults to "search-all"
+
+qradar:
+  base_url: https://qradar.example.com
+  token: ${QRADAR_SEC_TOKEN}      # an Authorized Service Token, sent in the SEC header (not Authorization: Bearer)
+  version: "21.0"                  # optional, defaults to "21.0" -- sent in the required Version header
+  verify_ssl: true                 # optional, defaults to true
+
+sumologic:
+  access_id: ${SUMOLOGIC_ACCESS_ID}
+  access_key: ${SUMOLOGIC_ACCESS_KEY}
+  base_url: https://api.sumologic.com/api   # optional; change for other deployments, e.g. api.us2.sumologic.com/api, api.eu.sumologic.com/api
+
+chronicle:
+  project: my-gcp-project
+  location: us                              # Chronicle instance region, e.g. "us", "europe-west2"
+  instance: ${CHRONICLE_INSTANCE_ID}        # the Chronicle customer/instance ID
+  access_token: ${CHRONICLE_ACCESS_TOKEN}   # a pre-obtained OAuth2 bearer token (e.g. `gcloud auth print-access-token`
+                                             # against a service account) -- this adapter doesn't implement Google's
+                                             # service-account JWT-bearer signing flow itself, see adapters/chronicle.py

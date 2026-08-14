@@ -41,6 +41,9 @@ real public REST API -- not a wrapper around any vendor SDK.
 | Elastic (Kibana Security + Elasticsearch) | Detection Engine rules | Lists API | Detection signals | Elasticsearch Query DSL |
 | Microsoft Sentinel | Scheduled Analytics Rules | Watchlists | Incidents | Log Analytics (KQL) |
 | CrowdStrike Falcon | Custom IOA rules | IOC management | Falcon Alerts | Falcon LogScale (LQL) -- optional, see [Known limitations](#known-limitations) |
+| IBM QRadar | CRE rule metadata (enable/disable/delete only) | Reference Data Sets | Offenses | Ariel Query Language (AQL) |
+| Sumo Logic | Monitors Library | Cloud SIEM Match Lists | Cloud SIEM Insights | Search Job API |
+| Google Chronicle (Google SecOps) | Rules (YARA-L text) | Reference Lists (no delete -- see [Known limitations](#known-limitations)) | Detections (rule-scoped, read-only) | UDM Search |
 
 ## Install
 
@@ -99,6 +102,19 @@ detectl -p elastic query '{"match": {"process.name": "mimikatz.exe"}}'
 # Falcon platform API (see Known limitations) -- requires logscale_url /
 # logscale_token in config, in addition to the Falcon client_id/secret.
 detectl -p crowdstrike query "#event_simpleName=ProcessRollup2 FileName=mimikatz.exe"
+
+detectl -p qradar rules list
+detectl -p qradar lists create -f examples/lists/malicious_domains.json
+detectl -p qradar alerts list
+detectl -p qradar query "SELECT UTF8(payload) AS payload FROM events WHERE sourceip='10.0.0.5'"
+
+detectl -p sumologic rules create -f examples/rules/c2_beacon_suspicious_port.json
+detectl -p sumologic lists list --kind blocklist
+detectl -p sumologic query "error | count by sourcehost"
+
+detectl -p chronicle rules create -f examples/rules/mimikatz_credential_dumping.json
+detectl -p chronicle lists create -f examples/lists/vip_watchlist_usernames.json
+detectl -p chronicle query 'principal.hostname="host1" and target.process.file.full_path contains "mimikatz.exe"'
 ```
 
 Every command prints JSON to stdout, so it composes with `jq` and shell
@@ -125,6 +141,17 @@ sigmux convert my_rule.yml -t logscale -o out/
 detectl -p crowdstrike query "$(cat out/my_rule.logscale.lql)"
 ```
 
+Two more targets pair the same way: sigmux's `qradar` output is valid AQL for `detectl -p qradar query`, and its `chronicle` output is a complete YARA-L rule -- exactly the `text` field `detectl -p chronicle rules create` expects, so a Sigma rule can go from YAML to a live Chronicle detection in two commands:
+
+```bash
+sigmux convert my_rule.yml -t qradar -o out/
+detectl -p qradar query "$(cat out/my_rule.qradar.aql)"
+
+sigmux convert my_rule.yml -t chronicle -o out/
+jq -n --rawfile q out/my_rule.chronicle.yaral '{name: "my_rule", query: $q}' > out/my_rule.chronicle.json
+detectl -p chronicle rules create -f out/my_rule.chronicle.json
+```
+
 ## Architecture
 
 - `detectl/models.py` -- canonical, platform-agnostic dataclasses (`Rule`,
@@ -136,9 +163,9 @@ detectl -p crowdstrike query "$(cat out/my_rule.logscale.lql)"
   platform implements, plus a small `HttpMixin` that centralizes HTTP error
   translation (`AuthenticationError`, `NotFoundError`, `APIError`) so
   concrete adapters don't each reimplement it.
-- `detectl/adapters/{splunk,elastic,sentinel,crowdstrike}.py` -- one
-  self-contained file per platform, each mapping the canonical interface
-  onto that platform's real REST API.
+- `detectl/adapters/{splunk,elastic,sentinel,crowdstrike,qradar,sumologic,chronicle}.py`
+  -- one self-contained file per platform, each mapping the canonical
+  interface onto that platform's real REST API.
 - `detectl/config.py` -- per-platform config loading from YAML and/or
   environment variables.
 - `detectl/cli.py` -- the click-based CLI wiring the above together.
@@ -188,6 +215,41 @@ documents its own convention at the top of its file:
 - IOC type inference (`ipv4` / `md5` / `sha1` / `sha256` / `domain`) in the
   CrowdStrike adapter is a heuristic based on the value's shape, not a
   caller-supplied type.
+- **QRadar's Custom Rules Engine has no API for authoring rule logic** --
+  `/analytics/rules` only manages metadata (enable/disable, delete) for
+  rules that already exist; new rule logic has to be built through the
+  in-product Rule Wizard. `create_rule`/`update_rule` raise
+  `UnsupportedOperationError`; use `enable_rule`/`disable_rule` instead.
+- **QRadar Reference Sets have no native "kind"** -- same `detectl_kind:
+  {kind}` tag convention as Elastic's `meta.detectl_kind`, stored in the
+  set's `description` field.
+- **Sumo Logic Monitors need a destination folder** (Monitors Library is a
+  folder tree, there's no bare/folder-less monitor) -- `create_rule`
+  requires `rule.raw["parent_id"]`, same convention as CrowdStrike's
+  `rule.raw["rule_group_id"]` for Custom IOA rules. Updates need the
+  monitor's current `version` for optimistic concurrency, so
+  `update_rule`/`set_rule_enabled` do a read-modify-write.
+- **Sumo Logic Cloud SIEM Match Lists have no "kind" field** (they have a
+  required `targetColumn` describing the *value type* -- IP, domain, file
+  hash, ... -- instead) -- same tag-in-description convention as QRadar.
+  Removing items needs match-list-item IDs, not raw values, so
+  `remove_list_items` reads the current items first to resolve them.
+- **Chronicle reference lists cannot be deleted via the API at all**
+  (confirmed directly in Google's own Terraform provider source, which
+  just drops the resource from state rather than deleting it) --
+  `delete_list` raises `UnsupportedOperationError` rather than silently
+  no-op'ing.
+- **Chronicle detections only exist scoped to the rule that generated
+  them** -- `list_alerts` requires a `rule_id` filter, and `get_alert` IDs
+  are encoded as `"{rule_id}:{detection_id}"`, same shape as CrowdStrike's
+  `"{rule_group_id}:{instance_id}"`. Detection triage/status lives in
+  Chronicle's separate SOAR/case-management module, not a simple status
+  field here, so `set_alert_status` raises `UnsupportedOperationError`.
+- **Chronicle auth is a pre-obtained OAuth2 bearer token, not a full
+  service-account flow** -- signing a JWT with an RSA private key is real
+  crypto, out of scope for a dependency-light client. Get one with
+  `gcloud auth print-access-token` (or your own refresh cron) and set it
+  as `access_token`.
 
 ## Testing
 

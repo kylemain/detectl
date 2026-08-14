@@ -40,7 +40,7 @@ real public REST API -- not a wrapper around any vendor SDK.
 | Splunk | Saved searches / correlation searches | KV Store collections | Fired alerts | Blocking search job (SPL) |
 | Elastic (Kibana Security + Elasticsearch) | Detection Engine rules | Lists API | Detection signals | Elasticsearch Query DSL |
 | Microsoft Sentinel | Scheduled Analytics Rules | Watchlists | Incidents | Log Analytics (KQL) |
-| CrowdStrike Falcon | Custom IOA rules | IOC management | Falcon Alerts | *Not supported -- see [Known limitations](#known-limitations)* |
+| CrowdStrike Falcon | Custom IOA rules | IOC management | Falcon Alerts | Falcon LogScale (LQL) -- optional, see [Known limitations](#known-limitations) |
 
 ## Install
 
@@ -94,6 +94,11 @@ detectl -p crowdstrike alerts set-status <alert_id> closed
 
 detectl -p sentinel query "SecurityEvent | where EventID == 4625 | take 20"
 detectl -p elastic query '{"match": {"process.name": "mimikatz.exe"}}'
+
+# Ad-hoc queries against Falcon run through Falcon LogScale, not the core
+# Falcon platform API (see Known limitations) -- requires logscale_url /
+# logscale_token in config, in addition to the Falcon client_id/secret.
+detectl -p crowdstrike query "#event_simpleName=ProcessRollup2 FileName=mimikatz.exe"
 ```
 
 Every command prints JSON to stdout, so it composes with `jq` and shell
@@ -108,6 +113,16 @@ directly into `detectl query`:
 ```bash
 sigmux convert my_rule.yml -t elasticsearch -o out/
 detectl -p elastic query "$(cat out/my_rule.elasticsearch.json)"
+```
+
+The same pairing works for CrowdStrike: sigmux's `logscale` target emits
+Falcon LogScale (LQL) query text, which `detectl -p crowdstrike query` now
+runs directly -- closing the gap noted below, where the core Falcon
+platform API itself has no ad-hoc query surface:
+
+```bash
+sigmux convert my_rule.yml -t logscale -o out/
+detectl -p crowdstrike query "$(cat out/my_rule.logscale.lql)"
 ```
 
 ## Architecture
@@ -136,7 +151,8 @@ method list) in a new file under `detectl/adapters/`, register it in
 fields to `detectl/config.py`'s `REQUIRED_FIELDS`/`OPTIONAL_FIELDS`. Not
 every platform needs to support every operation -- raise
 `UnsupportedOperationError` with a clear explanation rather than faking
-support (see CrowdStrike's `run_query`, or Splunk's `set_alert_status`).
+support (see Splunk's `set_alert_status`, or CrowdStrike's `run_query` when
+Falcon LogScale isn't configured).
 
 ## Known limitations
 
@@ -144,9 +160,18 @@ A few platforms don't have a clean native equivalent for one of detectl's
 canonical resources. Rather than papering over the mismatch, each adapter
 documents its own convention at the top of its file:
 
-- **CrowdStrike has no ad-hoc event query API** comparable to Splunk SPL,
-  Elasticsearch DSL, or Sentinel KQL -- `run_query` raises
-  `UnsupportedOperationError` instead of faking one.
+- **The core Falcon platform API has no ad-hoc event query endpoint**
+  comparable to Splunk SPL, Elasticsearch DSL, or Sentinel KQL -- Falcon
+  exposes detections/alerts/IOCs as discrete resources, not a general query
+  surface over raw events. `run_query` instead talks to **Falcon LogScale**,
+  a genuinely separate CrowdStrike product with its own base URL and its
+  own credential (a LogScale Personal API token, distinct from the Falcon
+  `client_id`/`client_secret` used for rules/lists/alerts). It's optional:
+  configure `logscale_url`/`logscale_token`/`logscale_repository` (see
+  `examples/config.yml.example`) to enable it; without them, `run_query`
+  raises `UnsupportedOperationError` explaining how to turn it on. LogScale
+  query jobs are asynchronous, so `run_query` polls the job (`poll_interval`
+  seconds between checks, up to `max_polls` times) until it reports done.
 - **Splunk's fired-alerts API has no settable status field** (no ack/close
   concept the way Elastic signals or Sentinel incidents have) --
   `set_alert_status` raises `UnsupportedOperationError`.

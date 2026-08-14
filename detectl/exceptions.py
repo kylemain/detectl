@@ -32,6 +32,6 @@ class APIError(DetectlError):
 class UnsupportedOperationError(DetectlError):
     """Raised when a platform's API has no real equivalent for the requested
     operation. Adapters should raise this rather than faking support -- e.g.
-    CrowdStrike's Falcon API has no ad-hoc event-search endpoint comparable
-    to Splunk SPL / Elasticsearch DSL / Sentinel KQL, so
-    CrowdStrikeAdapter.run_query() raises this instead of pretending."""
+    Splunk's fired-alerts API has no settable status field the way Elastic
+    signals or Sentinel incidents do, so SplunkAdapter.set_alert_status()
+    raises this instead of pretending."""

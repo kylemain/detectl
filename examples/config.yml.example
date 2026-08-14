@@ -33,3 +33,11 @@ crowdstrike:
   client_id: ${CROWDSTRIKE_CLIENT_ID}
   client_secret: ${CROWDSTRIKE_CLIENT_SECRET}
   base_url: https://api.crowdstrike.com   # change for EU/Gov clouds, e.g. api.eu-1.crowdstrike.com
+  # Falcon LogScale is a separate CrowdStrike product/API from the Falcon
+  # platform above -- it's what powers `detectl query`, since the Falcon
+  # platform API itself has no ad-hoc event search endpoint. All three are
+  # optional; without them, `detectl -p crowdstrike query ...` raises
+  # UnsupportedOperationError explaining how to enable it.
+  logscale_url: https://cloud.crowdstrike.com       # optional; region/self-hosted URL varies
+  logscale_token: ${CROWDSTRIKE_LOGSCALE_TOKEN}     # optional; a LogScale Personal API token, not the Falcon client_id/secret
+  logscale_repository: search-all                    # optional, defaults to "search-all"

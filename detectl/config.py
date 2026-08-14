@@ -52,7 +52,7 @@ OPTIONAL_FIELDS: Dict[str, List[str]] = {
     "splunk": ["owner", "app", "verify_ssl"],
     "elastic": ["es_base_url", "verify_ssl"],
     "sentinel": ["base_url"],
-    "crowdstrike": ["base_url"],
+    "crowdstrike": ["base_url", "logscale_url", "logscale_token", "logscale_repository"],
 }
 
 

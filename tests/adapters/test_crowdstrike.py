@@ -3,9 +3,10 @@ import unittest
 from detectl.adapters.crowdstrike import CrowdStrikeAdapter
 from detectl.exceptions import NotFoundError, UnsupportedOperationError
 from detectl.models import ListObject, Rule
-from tests.helpers import FakeResponse, FakeSession, route_handler
+from tests.helpers import FakeResponse, FakeSession, multi_route_handler, route_handler
 
 BASE = "https://api.crowdstrike.com"
+LOGSCALE_BASE = "https://cloud.crowdstrike.com"
 TOKEN_ROUTE = {("POST", "/oauth2/token"): FakeResponse(200, {"access_token": "tok", "expires_in": 1800})}
 
 
@@ -13,6 +14,20 @@ def make_adapter(routes):
     all_routes = {**TOKEN_ROUTE, **routes}
     session = FakeSession(route_handler(BASE, all_routes))
     adapter = CrowdStrikeAdapter(client_id="id", client_secret="secret", session=session)
+    return adapter, session
+
+
+def make_logscale_adapter(logscale_routes, falcon_routes=None):
+    all_falcon = {**TOKEN_ROUTE, **(falcon_routes or {})}
+    session = FakeSession(multi_route_handler({BASE: all_falcon, LOGSCALE_BASE: logscale_routes}))
+    adapter = CrowdStrikeAdapter(
+        client_id="id",
+        client_secret="secret",
+        logscale_url=LOGSCALE_BASE,
+        logscale_token="pat-token",
+        poll_interval=0,
+        session=session,
+    )
     return adapter, session
 
 
@@ -131,10 +146,79 @@ class TestCrowdStrikeAdapter(unittest.TestCase):
         alert = adapter.set_alert_status("a1", "closed")
         self.assertEqual(alert.status, "closed")
 
-    def test_run_query_unsupported(self):
+    def test_run_query_unsupported_when_logscale_not_configured(self):
         adapter, _ = make_adapter({})
         with self.assertRaises(UnsupportedOperationError):
             adapter.run_query("anything")
+
+    def test_run_query_via_logscale(self):
+        adapter, session = make_logscale_adapter(
+            {
+                ("POST", "/api/v1/repositories/search-all/queryjobs"): FakeResponse(200, {"id": "job1"}),
+                ("GET", "/api/v1/repositories/search-all/queryjobs/job1"): FakeResponse(
+                    200, {"done": True, "events": [{"a": "1"}, {"a": "2"}]}
+                ),
+            }
+        )
+        result = adapter.run_query("#event_simpleName=ProcessRollup2")
+        self.assertEqual(result.rows, [{"a": "1"}, {"a": "2"}])
+        self.assertEqual(result.columns, ["a"])
+
+    def test_run_query_polls_until_done(self):
+        responses = iter(
+            [
+                FakeResponse(200, {"done": False}),
+                FakeResponse(200, {"done": False}),
+                FakeResponse(200, {"done": True, "events": [{"x": "1"}]}),
+            ]
+        )
+        adapter, session = make_logscale_adapter(
+            {
+                ("POST", "/api/v1/repositories/search-all/queryjobs"): FakeResponse(200, {"id": "job1"}),
+                ("GET", "/api/v1/repositories/search-all/queryjobs/job1"): lambda: next(responses),
+            }
+        )
+        result = adapter.run_query("query")
+        self.assertEqual(result.rows, [{"x": "1"}])
+
+    def test_run_query_stops_after_max_polls_without_hanging(self):
+        adapter, session = make_logscale_adapter(
+            {
+                ("POST", "/api/v1/repositories/search-all/queryjobs"): FakeResponse(200, {"id": "job1"}),
+                ("GET", "/api/v1/repositories/search-all/queryjobs/job1"): FakeResponse(
+                    200, {"done": False, "events": []}
+                ),
+            }
+        )
+        adapter.max_polls = 2
+        result = adapter.run_query("query")
+        self.assertEqual(result.rows, [])
+
+    def test_run_query_respects_limit(self):
+        events = [{"i": str(i)} for i in range(5)]
+        adapter, session = make_logscale_adapter(
+            {
+                ("POST", "/api/v1/repositories/search-all/queryjobs"): FakeResponse(200, {"id": "job1"}),
+                ("GET", "/api/v1/repositories/search-all/queryjobs/job1"): FakeResponse(
+                    200, {"done": True, "events": events}
+                ),
+            }
+        )
+        result = adapter.run_query("query", limit=2)
+        self.assertEqual(len(result.rows), 2)
+
+    def test_run_query_uses_custom_repository(self):
+        adapter, session = make_logscale_adapter(
+            {
+                ("POST", "/api/v1/repositories/my-repo/queryjobs"): FakeResponse(200, {"id": "job1"}),
+                ("GET", "/api/v1/repositories/my-repo/queryjobs/job1"): FakeResponse(
+                    200, {"done": True, "events": []}
+                ),
+            }
+        )
+        adapter.run_query("query", repository="my-repo")
+        post_calls = [c for c in session.calls if c[0] == "POST"]
+        self.assertEqual(post_calls[0][1], f"{LOGSCALE_BASE}/api/v1/repositories/my-repo/queryjobs")
 
 
 if __name__ == "__main__":

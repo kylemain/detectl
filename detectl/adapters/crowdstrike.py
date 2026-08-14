@@ -20,9 +20,18 @@ adapter-specific conventions are documented here:
 - Alerts  -> the Falcon Alerts API (composite IDs, POST-based entity fetch,
              action_parameters-based status updates -- all matching Falcon's
              real API design rather than a generic REST CRUD pattern).
-- Events  -> Falcon has no ad-hoc query language/endpoint comparable to
-             Splunk SPL, Elasticsearch DSL, or Sentinel KQL. run_query
-             raises UnsupportedOperationError rather than faking one.
+- Events  -> the core Falcon platform API (the one this adapter otherwise
+             talks to) has no ad-hoc event query endpoint comparable to
+             Splunk SPL, Elasticsearch DSL, or Sentinel KQL -- Falcon
+             exposes detections/alerts/IOCs as discrete resources, not a
+             general query surface over raw events. Ad-hoc queries run
+             against Falcon LogScale instead, which is a genuinely
+             separate CrowdStrike product with its own base URL and its
+             own auth (a LogScale Personal API token, not the Falcon OAuth2
+             client_id/client_secret used everywhere else in this file).
+             run_query() only works when `logscale_url`/`logscale_token`
+             are configured; otherwise it raises
+             UnsupportedOperationError explaining why, same as before.
 """
 from __future__ import annotations
 
@@ -67,11 +76,21 @@ class CrowdStrikeAdapter(SIEMAdapter):
         client_id: str,
         client_secret: str,
         base_url: str = "https://api.crowdstrike.com",
+        logscale_url: Optional[str] = None,
+        logscale_token: Optional[str] = None,
+        logscale_repository: str = "search-all",
+        poll_interval: float = 1.0,
+        max_polls: int = 30,
         session: Optional[requests.Session] = None,
     ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.base_url = base_url.rstrip("/")
+        self.logscale_url = logscale_url.rstrip("/") if logscale_url else None
+        self.logscale_token = logscale_token
+        self.logscale_repository = logscale_repository
+        self.poll_interval = poll_interval
+        self.max_polls = max_polls
         self.session = session or requests.Session()
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
@@ -356,10 +375,43 @@ class CrowdStrikeAdapter(SIEMAdapter):
         )
         return self.get_alert(alert_id)
 
-    # -- events / raw queries ---------------------------------------------
-    def run_query(self, query: str, **kwargs: Any) -> QueryResult:
-        raise UnsupportedOperationError(
-            "CrowdStrike Falcon has no ad-hoc event query API comparable to Splunk SPL, "
-            "Elasticsearch Query DSL, or Sentinel KQL (Falcon exposes detections/alerts/IOCs "
-            "as discrete resources, not a general query surface over raw events)."
-        )
+    # -- events / raw queries (Falcon LogScale, not the Falcon platform API) --
+    def _logscale_headers(self) -> Dict[str, str]:
+        return {"Authorization": f"Bearer {self.logscale_token}"}
+
+    def run_query(
+        self,
+        query: str,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        limit: int = 100,
+        repository: Optional[str] = None,
+        **kwargs: Any,
+    ) -> QueryResult:
+        if not self.logscale_url or not self.logscale_token:
+            raise UnsupportedOperationError(
+                "The core Falcon platform API has no ad-hoc event query endpoint comparable "
+                "to Splunk SPL, Elasticsearch Query DSL, or Sentinel KQL -- but Falcon LogScale "
+                "(a separate CrowdStrike product/API) does. Configure `logscale_url` and "
+                "`logscale_token` (or CROWDSTRIKE_LOGSCALE_URL / CROWDSTRIKE_LOGSCALE_TOKEN) to "
+                "enable it; a LogScale Personal API token is a different credential than the "
+                "Falcon client_id/client_secret used for rules/lists/alerts."
+            )
+
+        repo = repository or self.logscale_repository
+        body: Dict[str, Any] = {"queryString": query, "start": start or "1hour", "end": end or "now"}
+        jobs_url = f"{self.logscale_url}/api/v1/repositories/{repo}/queryjobs"
+        created = self._request_json("POST", jobs_url, headers=self._logscale_headers(), json=body)
+        job_url = f"{jobs_url}/{created['id']}"
+
+        result = self._request_json("GET", job_url, headers=self._logscale_headers())
+        polls = 0
+        while not result.get("done", False) and polls < self.max_polls:
+            if self.poll_interval > 0:
+                time.sleep(self.poll_interval)
+            polls += 1
+            result = self._request_json("GET", job_url, headers=self._logscale_headers())
+
+        events = result.get("events", [])[:limit]
+        columns = sorted({key for event in events for key in event.keys()})
+        return QueryResult(columns=columns, rows=events, raw=result)

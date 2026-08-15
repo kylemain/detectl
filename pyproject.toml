@@ -32,9 +32,12 @@ dependencies = [
 [project.optional-dependencies]
 # Powers `detectl rules create-from-sigma` / `--dry-run`'s diff view. Kept
 # optional so the core install stays dependency-light -- most detectl
-# commands need neither. sigmux isn't on PyPI (yet, see its own README),
-# so this pins straight to the GitHub repo.
-sigma = ["sigmux @ git+https://github.com/kylemain/sigmux.git"]
+# commands need neither. sigmux is on PyPI now; before it was, this used
+# to point straight at the GitHub repo, but PyPI's upload API rejects any
+# package whose metadata contains a direct URL/VCS dependency ("Can't have
+# direct dependency: ... See https://packaging.python.org/specifications/core-metadata"),
+# so a real version pin is required here, not just a good idea.
+sigma = ["sigmux>=0.3.0"]
 dryrun = ["rich>=13.0"]
 
 [project.scripts]

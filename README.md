@@ -1,11 +1,16 @@
 # detectl
 
 [![CI](https://github.com/kylemain/detectl/actions/workflows/ci.yml/badge.svg)](https://github.com/kylemain/detectl/actions/workflows/ci.yml)
+[![coverage](coverage.svg)](#testing)
 
 A CLI (and Python library) for managing detection rules, tuning lists
 (watchlists, exclusion/allow/block lists, suppression lists, KV stores),
 alerts, and ad-hoc queries across multiple SIEM/EDR platforms through one
 consistent interface.
+
+This is the same kind of cross-platform detection tuning work I do professionally -- one consistent interface instead of re-learning seven platforms' APIs -- built clean-room, not tied to any employer's internal tooling. It pairs directly with [sigmux](https://github.com/kylemain/sigmux), which converts a portable Sigma rule into whichever query language a given platform speaks; detectl takes it the rest of the way and actually pushes it live. See [Pairs well with sigmux](#pairs-well-with-sigmux) below.
+
+![sigmux and detectl demo](demo.gif)
 
 ```
 $ detectl -p splunk rules list
@@ -47,12 +52,17 @@ real public REST API -- not a wrapper around any vendor SDK.
 
 ## Install
 
+Not published to PyPI yet -- `pyproject.toml` and `.github/workflows/publish.yml` are set up for it (PyPI Trusted Publishing, triggered on a version tag), but that needs a one-time manual step on pypi.org's side first. Until then, install from source:
+
 ```bash
 git clone https://github.com/kylemain/detectl.git
 cd detectl
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+
+# Optional extras: `sigma` for `rules create-from-sigma`, `dryrun` for --dry-run's diff view
+pip install -e ".[sigma,dryrun]"
 ```
 
 ## Configure
@@ -122,34 +132,34 @@ pipelines the way a real ops CLI should.
 
 ### Pairs well with [sigmux](https://github.com/kylemain/sigmux)
 
-sigmux compiles a portable Sigma detection rule into per-platform query
-syntax. Its Elasticsearch output is valid Query DSL JSON, so it feeds
-directly into `detectl query`:
+sigmux compiles a portable Sigma detection rule into per-platform query syntax, and its target names match detectl's platform names 1:1 on purpose (`elastic`, `crowdstrike`, `sentinel`, `splunk`, `qradar`, `sumologic`, `chronicle`). detectl imports sigmux as a library (the `sigma` extra) to fold "convert, then create" into one step:
 
 ```bash
-sigmux convert my_rule.yml -t elasticsearch -o out/
-detectl -p elastic query "$(cat out/my_rule.elasticsearch.json)"
+detectl -p elastic rules create-from-sigma my_rule.yml
 ```
 
-The same pairing works for CrowdStrike: sigmux's `logscale` target emits
-Falcon LogScale (LQL) query text, which `detectl -p crowdstrike query` now
-runs directly -- closing the gap noted below, where the core Falcon
-platform API itself has no ad-hoc query surface:
+`rules create-from-sigma` parses the Sigma rule, picks the sigmux target that matches `--platform` automatically (never a manual mapping you can get out of sync), and creates it as a live detection rule. Add `--dry-run` to see the full converted query and rule metadata -- Terraform-plan style -- before anything is actually created:
 
 ```bash
-sigmux convert my_rule.yml -t logscale -o out/
-detectl -p crowdstrike query "$(cat out/my_rule.logscale.lql)"
+detectl -p qradar rules create-from-sigma my_rule.yml --dry-run
 ```
 
-Two more targets pair the same way: sigmux's `qradar` output is valid AQL for `detectl -p qradar query`, and its `chronicle` output is a complete YARA-L rule -- exactly the `text` field `detectl -p chronicle rules create` expects, so a Sigma rule can go from YAML to a live Chronicle detection in two commands:
+A few platforms need one extra piece of platform-specific context a generic Sigma rule doesn't carry (CrowdStrike's IOA rule group, Sumo Logic's Monitors folder) -- pass it with repeatable `--raw KEY=VALUE`:
 
 ```bash
-sigmux convert my_rule.yml -t qradar -o out/
-detectl -p qradar query "$(cat out/my_rule.qradar.aql)"
+detectl -p sumologic rules create-from-sigma my_rule.yml --raw parent_id=folder123
+```
 
-sigmux convert my_rule.yml -t chronicle -o out/
-jq -n --rawfile q out/my_rule.chronicle.yaral '{name: "my_rule", query: $q}' > out/my_rule.chronicle.json
-detectl -p chronicle rules create -f out/my_rule.chronicle.json
+This isn't just a documented pairing: a separate `integration` job in this repo's CI checks out sigmux fresh, spins up a real Elasticsearch, and runs a full Sigma rule → sigmux → live Elasticsearch → detectl round trip against it end to end (see `scripts/integration_test_elastic.py`) -- so the two projects staying compatible is something CI actually verifies, not just a README claim.
+
+The lower-level pairing (convert with sigmux, then feed the raw query text into `detectl query` yourself) still works too, and is what `create-from-sigma` does internally for the rule-creation path:
+
+```bash
+sigmux convert my_rule.yml -t elastic -o out/
+detectl -p elastic query "$(cat out/my_rule.elastic.json)"
+
+sigmux convert my_rule.yml -t crowdstrike -o out/
+detectl -p crowdstrike query "$(cat out/my_rule.crowdstrike.lql)"
 ```
 
 ## Architecture
@@ -168,7 +178,13 @@ detectl -p chronicle rules create -f out/my_rule.chronicle.json
   interface onto that platform's real REST API.
 - `detectl/config.py` -- per-platform config loading from YAML and/or
   environment variables.
-- `detectl/cli.py` -- the click-based CLI wiring the above together.
+- `detectl/cli.py` -- the click-based CLI wiring the above together,
+  including the sigmux bridge (`rules create-from-sigma`) and the
+  Terraform-plan-style `--dry-run` diff view.
+- `scripts/integration_test_elastic.py` -- the live, network-touching
+  Sigma → sigmux → Elasticsearch → detectl round trip that CI's
+  `integration` job runs (see Testing below); `scripts/generate_coverage_badge.py`
+  is the self-hosted badge renderer behind the coverage badge above.
 
 ### Adding a new platform
 
@@ -262,6 +278,8 @@ credentials:
 ```bash
 python -m unittest discover -v
 ```
+
+That's the fast, always-run signal that actually gates merges. Layered on top of it, a separate `integration` job in CI (see `scripts/integration_test_elastic.py`) deliberately does touch the network: it checks out sigmux, spins up a real Elasticsearch service container, and runs a full Sigma rule → sigmux → live Elasticsearch → detectl pipeline end to end. It's `continue-on-error` and its own job so a live-service flake never reddens the unit-test signal above.
 
 ## License
 

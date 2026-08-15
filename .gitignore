@@ -8,6 +8,8 @@ build/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+.coverage
+htmlcov/
 
 # Local credentials -- never commit a real config file
 config.yml

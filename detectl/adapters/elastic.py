@@ -10,7 +10,7 @@ Maps detectl's canonical resources onto the real Kibana/Elasticsearch APIs:
 - Alerts      -> Detection signals API (/api/detection_engine/signals/*)
 - run_query   -> a raw Elasticsearch _search against `es_base_url`. Accepts
                  either a full Query DSL JSON body (a string, e.g. straight
-                 from `sigmux convert --target elasticsearch`) or a bare
+                 from `sigmux convert --target elastic`) or a bare
                  query string, which gets wrapped in a query_string query.
 
 Kibana requires the `kbn-xsrf` header on any state-changing request; that's

@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -17,9 +18,87 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install
-        run: pip install -e .
+      - name: Install (with the sigmux/rich extras, so create-from-sigma and --dry-run are covered by the unit suite too)
+        run: pip install -e ".[sigma,dryrun]"
       - name: Run tests
         run: python -m unittest discover -v
       - name: CLI smoke test
         run: detectl targets
+
+  coverage-badge:
+    # Self-hosted: no third-party badge service or account, just
+    # coverage's own --format=total piped into scripts/generate_coverage_badge.py.
+    # Commits the regenerated SVG back to main only if it actually changed.
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -e .
+          pip install coverage
+      - name: Measure coverage and render badge
+        run: |
+          coverage run -m unittest discover
+          python scripts/generate_coverage_badge.py
+      - name: Commit badge if changed
+        run: |
+          if ! git diff --quiet -- coverage.svg; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add coverage.svg
+            git commit -m "Update coverage badge [skip ci]"
+            git push
+          else
+            echo "coverage.svg unchanged, nothing to commit"
+          fi
+
+  integration:
+    # Proves the sigmux/detectl pairing documented in the README actually
+    # works end to end against a real, live Elasticsearch -- not just that
+    # each repo's own network-free unit suite passes in isolation. See
+    # scripts/integration_test_elastic.py. Separate job (and
+    # continue-on-error) so a real-service flake never reddens the fast
+    # unit-test signal above, which is the one that actually gates merges.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: detectl
+      - uses: actions/checkout@v4
+        with:
+          repository: kylemain/sigmux
+          path: sigmux
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install both projects
+        run: |
+          pip install -e ./sigmux
+          pip install -e ./detectl
+      - name: Wait for Elasticsearch
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9200/_cluster/health && break
+            echo "waiting for elasticsearch ($i/30)..."
+            sleep 2
+          done
+      - name: Run the Sigma -> sigmux -> Elasticsearch -> detectl integration test
+        working-directory: detectl
+        run: python scripts/integration_test_elastic.py

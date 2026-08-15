@@ -140,6 +140,20 @@ detectl -p chronicle query 'principal.hostname="host1" and target.process.file.f
 Every command prints JSON to stdout, so it composes with `jq` and shell
 pipelines the way a real ops CLI should.
 
+### Try it with the bundled example rules (no credentials needed)
+
+`examples/rules/` has five real detection rules spanning credential access, web shells, persistence, and C2 -- pointed at five different platforms below, all with `--dry-run` so nothing needs to be configured first:
+
+```bash
+detectl -p splunk rules create -f examples/rules/suspicious_powershell.json --dry-run
+detectl -p elastic rules create -f examples/rules/mimikatz_credential_dumping.json --dry-run
+detectl -p chronicle rules create -f examples/rules/webshell_iis_worker_process.json --dry-run
+detectl -p qradar rules create -f examples/rules/registry_run_key_persistence.json --dry-run
+detectl -p sumologic rules create -f examples/rules/c2_beacon_suspicious_port.json --dry-run
+```
+
+Drop `--dry-run` on any of those and it becomes a real `rules create` call against that platform -- at which point it needs credentials configured for it (see Configure above). `examples/lists/` has five example lists (watchlist, blocklist, allowlist, and suppression) if you want to try `lists create` the same way, though list creation doesn't have a `--dry-run` mode yet.
+
 ### Pairs well with [sigmux](https://github.com/kylemain/sigmux)
 
 sigmux compiles a portable Sigma detection rule into per-platform query syntax, and its target names match detectl's platform names 1:1 on purpose (`elastic`, `crowdstrike`, `sentinel`, `splunk`, `qradar`, `sumologic`, `chronicle`). detectl imports sigmux as a library (the `sigma` extra) to fold "convert, then create" into one step.
@@ -292,7 +306,32 @@ credentials:
 python -m unittest discover -v
 ```
 
-That's the fast, always-run signal that actually gates merges. Layered on top of it, a separate `integration` job in CI (see `scripts/integration_test_elastic.py`) deliberately does touch the network: it checks out sigmux, spins up a real Elasticsearch service container, and runs a full Sigma rule → sigmux → live Elasticsearch → detectl pipeline end to end. It's `continue-on-error` and its own job so a live-service flake never reddens the unit-test signal above.
+That's the fast, always-run signal that actually gates merges. Layered on top of it, a separate `integration` job in CI (see `scripts/integration_test_elastic.py`) deliberately does touch the network: it checks out sigmux, spins up a real Elasticsearch service container, and runs a full Sigma rule → sigmux → live Elasticsearch → detectl pipeline end to end. It's `continue-on-error` and its own job so a live-service flake never reddens the unit-test signal above. The [Actions tab](https://github.com/kylemain/detectl/actions/workflows/ci.yml) is the easiest way to see it passing without running anything yourself.
+
+### Optional: run the live Elasticsearch integration test yourself
+
+This needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) and pulls a ~600MB image, so it's not part of the quick-start flow above -- but if you want to watch the actual pipeline hit a real Elasticsearch rather than take CI's word for it:
+
+```bash
+git clone https://github.com/kylemain/detectl.git && cd detectl
+git clone https://github.com/kylemain/sigmux ../sigmux
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ../sigmux -e .
+
+docker run -d --name detectl-demo-es -p 9200:9200 \
+  -e discovery.type=single-node -e xpack.security.enabled=false \
+  docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+
+# wait for it to report healthy (takes ~10-20s)
+until curl -sf http://localhost:9200/_cluster/health; do sleep 2; done
+
+python scripts/integration_test_elastic.py
+
+docker stop detectl-demo-es && docker rm detectl-demo-es
+```
+
+That's the exact same image, config, and script CI runs -- just driven locally instead of as a GitHub Actions service container.
 
 ## License
 

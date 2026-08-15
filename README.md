@@ -306,7 +306,11 @@ credentials:
 python -m unittest discover -v
 ```
 
-That's the fast, always-run signal that actually gates merges. Layered on top of it, a separate `integration` job in CI (see `scripts/integration_test_elastic.py`) deliberately does touch the network: it checks out sigmux, spins up a real Elasticsearch service container, and runs a full Sigma rule → sigmux → live Elasticsearch → detectl pipeline end to end. It's `continue-on-error` and its own job so a live-service flake never reddens the unit-test signal above. The [Actions tab](https://github.com/kylemain/detectl/actions/workflows/ci.yml) is the easiest way to see it passing without running anything yourself.
+That's the fast, always-run signal that actually gates merges -- and being entirely mocked, it proves the code builds the right request and parses a given response shape, but can't catch "I misunderstood what the real API actually returns."
+
+The `integration` job in CI is the one place nothing is mocked. It checks out sigmux fresh, spins up a real Elasticsearch 8.13.4 in a service container, converts a real Sigma rule to real Elasticsearch Query DSL with sigmux, indexes a handful of real documents into that live server (some that should match the rule, some that shouldn't), runs the converted query through detectl's actual `ElasticAdapter.run_query` against it, and asserts the *correct* documents come back -- not just that nothing threw an exception (see `scripts/integration_test_elastic.py`). It's `continue-on-error` and its own job so a live-service flake never reddens the unit-test signal above.
+
+**To see it passing yourself, no setup required:** open the [Actions tab](https://github.com/kylemain/detectl/actions/workflows/ci.yml), click the most recent run, then the `integration` job in the left-hand job list, then expand the "Run the Sigma -> sigmux -> Elasticsearch -> detectl integration test" step -- the log shows the actual converted query, the documents indexed, and the assertion that only the right ones matched.
 
 ### Optional: run the live Elasticsearch integration test yourself
 

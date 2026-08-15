@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/kylemain/detectl/actions/workflows/ci.yml/badge.svg)](https://github.com/kylemain/detectl/actions/workflows/ci.yml)
 [![coverage](coverage.svg)](#testing)
+[![PyPI](https://img.shields.io/pypi/v/detectl)](https://pypi.org/project/detectl/)
 
 A CLI (and Python library) for managing detection rules, tuning lists
 (watchlists, exclusion/allow/block lists, suppression lists, KV stores),
@@ -52,16 +53,25 @@ real public REST API -- not a wrapper around any vendor SDK.
 
 ## Install
 
-Not published to PyPI yet -- `pyproject.toml` and `.github/workflows/publish.yml` are set up for it (PyPI Trusted Publishing, triggered on a version tag), but that needs a one-time manual step on pypi.org's side first. Until then, install from source:
+Published on PyPI. In a fresh terminal, with no prior setup:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install "detectl[sigma,dryrun]"
+```
+
+The quotes matter -- without them, zsh (macOS's default shell) treats `[...]` as a glob pattern and errors instead of installing. `sigma` pulls in [sigmux](https://github.com/kylemain/sigmux) (for `rules create-from-sigma`); `dryrun` pulls in `rich` (for `--dry-run`'s diff view). Both are optional -- plain `pip install detectl` works fine for everything else. And `pip install detectl` alone, outside a venv, will likely be refused on a modern Mac -- recent Python installs block bare system-wide installs on purpose, which the two lines above sidestep.
+
+Prefer [pipx](https://pipx.pypa.io) and don't want to think about venvs at all: `pipx install "detectl[sigma,dryrun]"` (one command, isolation handled automatically).
+
+The Usage examples below reference files under `examples/`, so to run them verbatim, clone the repo instead and install in editable mode:
 
 ```bash
 git clone https://github.com/kylemain/detectl.git
 cd detectl
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
-
-# Optional extras: `sigma` for `rules create-from-sigma`, `dryrun` for --dry-run's diff view
 pip install -e ".[sigma,dryrun]"
 ```
 
@@ -132,34 +142,37 @@ pipelines the way a real ops CLI should.
 
 ### Pairs well with [sigmux](https://github.com/kylemain/sigmux)
 
-sigmux compiles a portable Sigma detection rule into per-platform query syntax, and its target names match detectl's platform names 1:1 on purpose (`elastic`, `crowdstrike`, `sentinel`, `splunk`, `qradar`, `sumologic`, `chronicle`). detectl imports sigmux as a library (the `sigma` extra) to fold "convert, then create" into one step:
+sigmux compiles a portable Sigma detection rule into per-platform query syntax, and its target names match detectl's platform names 1:1 on purpose (`elastic`, `crowdstrike`, `sentinel`, `splunk`, `qradar`, `sumologic`, `chronicle`). detectl imports sigmux as a library (the `sigma` extra) to fold "convert, then create" into one step.
+
+Try it right now, no credentials or config needed -- grab a real example rule and run it with `--dry-run`, which shows the full converted query and rule metadata (Terraform-plan style) without touching any platform:
 
 ```bash
-detectl -p elastic rules create-from-sigma my_rule.yml
+curl -o mimikatz.yml https://raw.githubusercontent.com/kylemain/sigmux/main/examples/mimikatz_execution.yml
+detectl -p elastic rules create-from-sigma mimikatz.yml --dry-run
 ```
 
-`rules create-from-sigma` parses the Sigma rule, picks the sigmux target that matches `--platform` automatically (never a manual mapping you can get out of sync), and creates it as a live detection rule. Add `--dry-run` to see the full converted query and rule metadata -- Terraform-plan style -- before anything is actually created:
+Swap `elastic` for `qradar`, `crowdstrike`, `chronicle`, etc. to see the same rule converted differently per platform. Drop `--dry-run` and it actually creates the rule -- that part does need real credentials in `~/.detectl/config.yml` first (see Configure above):
 
 ```bash
-detectl -p qradar rules create-from-sigma my_rule.yml --dry-run
+detectl -p elastic rules create-from-sigma mimikatz.yml
 ```
 
 A few platforms need one extra piece of platform-specific context a generic Sigma rule doesn't carry (CrowdStrike's IOA rule group, Sumo Logic's Monitors folder) -- pass it with repeatable `--raw KEY=VALUE`:
 
 ```bash
-detectl -p sumologic rules create-from-sigma my_rule.yml --raw parent_id=folder123
+detectl -p sumologic rules create-from-sigma mimikatz.yml --raw parent_id=folder123
 ```
 
 This isn't just a documented pairing: a separate `integration` job in this repo's CI checks out sigmux fresh, spins up a real Elasticsearch, and runs a full Sigma rule → sigmux → live Elasticsearch → detectl round trip against it end to end (see `scripts/integration_test_elastic.py`) -- so the two projects staying compatible is something CI actually verifies, not just a README claim.
 
-The lower-level pairing (convert with sigmux, then feed the raw query text into `detectl query` yourself) still works too, and is what `create-from-sigma` does internally for the rule-creation path:
+The lower-level pairing (convert with sigmux, then feed the raw query text into `detectl query` yourself) still works too, and is what `create-from-sigma` does internally for the rule-creation path. `sigmux convert` runs with no credentials either way; `detectl query` (like `rules create-from-sigma` without `--dry-run`) needs a real, configured platform to actually query:
 
 ```bash
-sigmux convert my_rule.yml -t elastic -o out/
-detectl -p elastic query "$(cat out/my_rule.elastic.json)"
+sigmux convert mimikatz.yml -t elastic -o out/
+detectl -p elastic query "$(cat out/mimikatz.elastic.json)"
 
-sigmux convert my_rule.yml -t crowdstrike -o out/
-detectl -p crowdstrike query "$(cat out/my_rule.crowdstrike.lql)"
+sigmux convert mimikatz.yml -t crowdstrike -o out/
+detectl -p crowdstrike query "$(cat out/mimikatz.crowdstrike.lql)"
 ```
 
 ## Architecture

@@ -11,6 +11,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:  # manual escape hatch, in case the tag-push trigger doesn't fire
 
 jobs:
   build:

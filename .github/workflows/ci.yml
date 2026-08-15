@@ -39,9 +39,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install
+      - name: Install (same extras as the test job -- coverage runs the whole suite, including create-from-sigma/--dry-run tests)
         run: |
-          pip install -e .
+          pip install -e ".[sigma,dryrun]"
           pip install coverage
       - name: Measure coverage and render badge
         run: |

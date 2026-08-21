@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "detectl"
-version = "0.2.1"
+version = "0.2.2"
 description = "A CLI for managing detection rules, tuning lists, alerts, and ad-hoc queries across multiple SIEM/EDR platforms through one consistent interface."
 readme = "README.md"
 requires-python = ">=3.9"

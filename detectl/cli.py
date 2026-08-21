@@ -59,9 +59,7 @@ def _load_sigmux():
         from sigmux.rule import SigmaRule
     except ImportError as exc:
         raise click.ClickException(
-            "rules create-from-sigma needs sigmux installed: pip install 'detectl[sigma]' "
-            "(sigmux isn't on PyPI yet -- that extra installs it straight from "
-            "https://github.com/kylemain/sigmux)"
+            "rules create-from-sigma needs sigmux installed: pip install 'detectl[sigma]'"
         ) from exc
     return SigmaRule, get_backend
 
@@ -76,6 +74,40 @@ def _load_rich():
             "--dry-run needs rich installed: pip install 'detectl[dryrun]'"
         ) from exc
     return Console, Panel, Text
+
+
+def _try_load_rich():
+    """Soft-import counterpart to _load_rich(), for callers (like `targets`)
+    that should still work perfectly well without the optional `dryrun`
+    extra -- falls back to (None, None) instead of raising."""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+    except ImportError:
+        return None, None
+    return Console, Table
+
+
+def _stdout_is_tty() -> bool:
+    """Broken out as its own function (rather than an inline sys.stdout.isatty()
+    call) purely so tests can patch it directly -- Click's CliRunner swaps
+    out sys.stdout for a captured buffer during invoke(), which would make
+    patching sys.stdout.isatty itself unreliable."""
+    return sys.stdout.isatty()
+
+
+# Display metadata for `targets` only -- purely cosmetic. Colors match
+# sigmux's _TARGET_INFO exactly for the same platform, since sigmux's
+# target names and detectl's platform names are the same 1:1 set.
+_PLATFORM_INFO: Dict[str, Dict[str, str]] = {
+    "splunk": {"query": "Splunk SPL", "rules": "Saved searches / correlation searches", "color": "orange3"},
+    "elastic": {"query": "Elasticsearch Query DSL", "rules": "Detection Engine rules", "color": "gold3"},
+    "sentinel": {"query": "Microsoft Sentinel (KQL)", "rules": "Scheduled Analytics Rules", "color": "deep_sky_blue1"},
+    "crowdstrike": {"query": "CrowdStrike Falcon LogScale (LQL)", "rules": "Custom IOA rules", "color": "magenta1"},
+    "qradar": {"query": "IBM QRadar (AQL)", "rules": "CRE rule metadata (enable/disable/delete)", "color": "green3"},
+    "chronicle": {"query": "Google Chronicle (YARA-L 2.0)", "rules": "Rules (YARA-L text)", "color": "cyan1"},
+    "sumologic": {"query": "Sumo Logic search query", "rules": "Monitors Library", "color": "red3"},
+}
 
 
 def _append_field(body, sign: str, key: str, value: Any, style: str) -> None:
@@ -145,9 +177,30 @@ def _adapter(ctx: click.Context) -> SIEMAdapter:
 
 @main.command()
 def targets():
-    """List supported SIEM/EDR platforms."""
+    """List supported SIEM/EDR platforms.
+
+    Renders a colored table (matching sigmux's `targets` command) in an
+    interactive terminal. Falls back to a plain one-name-per-line list --
+    same as always -- when piped/redirected, or when rich isn't installed,
+    so `detectl targets | xargs ...`-style scripting still works exactly
+    as before.
+    """
+    Console, Table = _try_load_rich() if _stdout_is_tty() else (None, None)
+    if Console is None:
+        for name in sorted(REGISTRY):
+            click.echo(name)
+        return
+
+    table = Table(title="detectl supported platforms", header_style="bold")
+    table.add_column("Platform", style="bold")
+    table.add_column("Ad-hoc query language")
+    table.add_column("Rules resource")
     for name in sorted(REGISTRY):
-        click.echo(name)
+        info = _PLATFORM_INFO.get(name, {})
+        color = info.get("color", "white")
+        table.add_row(f"[{color}]{name}[/{color}]", info.get("query", "--"), info.get("rules", "--"))
+
+    Console().print(table)
 
 
 @main.command("test-connection")

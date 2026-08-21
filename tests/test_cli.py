@@ -55,6 +55,24 @@ class TestCli(unittest.TestCase):
         for name in ("splunk", "elastic", "sentinel", "crowdstrike"):
             self.assertIn(name, result.output)
 
+    def test_targets_plain_list_when_not_a_tty(self):
+        # CliRunner's captured output isn't a real tty, so this is really
+        # just documenting/pinning the default (piped) behavior explicitly.
+        result = self.runner.invoke(main, ["targets"])
+        self.assertEqual(result.exit_code, 0)
+        lines = result.output.strip().splitlines()
+        self.assertEqual(sorted(lines), sorted(["splunk", "elastic", "sentinel", "crowdstrike", "qradar", "sumologic", "chronicle"]))
+
+    @patch("detectl.cli._stdout_is_tty", return_value=True)
+    def test_targets_renders_rich_table_when_tty(self, _mock_tty):
+        result = self.runner.invoke(main, ["targets"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("detectl supported platforms", result.output)
+        for name in ("splunk", "elastic", "sentinel", "crowdstrike", "qradar", "sumologic", "chronicle"):
+            self.assertIn(name, result.output)
+        self.assertIn("Ad-hoc query language", result.output)
+        self.assertIn("Rules resource", result.output)
+
     def test_platform_required(self):
         result = self.runner.invoke(main, ["rules", "list"])
         self.assertNotEqual(result.exit_code, 0)

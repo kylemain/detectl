@@ -21,6 +21,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
 ]
 dependencies = [
@@ -37,7 +39,7 @@ dependencies = [
 # package whose metadata contains a direct URL/VCS dependency ("Can't have
 # direct dependency: ... See https://packaging.python.org/specifications/core-metadata"),
 # so a real version pin is required here, not just a good idea.
-sigma = ["sigmux>=0.3.0"]
+sigma = ["sigmux>=0.3.1"]
 dryrun = ["rich>=13.0"]
 
 [project.scripts]

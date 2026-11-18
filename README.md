@@ -321,7 +321,7 @@ pip install -e ../sigmux -e .
 
 docker run -d --name detectl-demo-es -p 9200:9200 \
   -e discovery.type=single-node -e xpack.security.enabled=false \
-  docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+  docker.elastic.co/elasticsearch/elasticsearch:8.19.25
 
 # wait for it to report healthy (takes ~10-20s)
 until curl -sf http://localhost:9200/_cluster/health; do sleep 2; done

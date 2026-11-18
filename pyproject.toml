@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "detectl"
-version = "0.2.2"
+version = "0.3.0"
 description = "A CLI for managing detection rules, tuning lists, alerts, and ad-hoc queries across multiple SIEM/EDR platforms through one consistent interface."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Kyle Main" }]
 keywords = ["siem", "detection-engineering", "splunk", "elastic", "sentinel", "crowdstrike", "qradar", "sumologic", "chronicle", "security", "sigmux", "sigma"]
@@ -17,10 +17,11 @@ classifiers = [
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
 ]
 dependencies = [
@@ -37,7 +38,7 @@ dependencies = [
 # package whose metadata contains a direct URL/VCS dependency ("Can't have
 # direct dependency: ... See https://packaging.python.org/specifications/core-metadata"),
 # so a real version pin is required here, not just a good idea.
-sigma = ["sigmux>=0.3.0"]
+sigma = ["sigmux>=0.3.1"]
 dryrun = ["rich>=13.0"]
 
 [project.scripts]
